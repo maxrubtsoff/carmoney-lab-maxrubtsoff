@@ -8,6 +8,7 @@ use CarMoneyLab\Domain\ApplicationValidator;
 use CarMoneyLab\Domain\ValidationException;
 use CarMoneyLab\Domain\VehicleAge;
 use CarMoneyLab\Domain\VinValidator;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class ApplicationValidatorTest extends TestCase
@@ -77,6 +78,40 @@ final class ApplicationValidatorTest extends TestCase
                 ['vin', 'market_value', 'term_months'],
                 array_keys($exception->errors()),
             );
+        }
+    }
+
+    #[DataProvider('invalidMileage')]
+    public function testRejectsInvalidMileage(array $overrides): void
+    {
+        try {
+            $this->validator->validate($this->validPayload($overrides));
+            self::fail('Ожидали ValidationException');
+        } catch (ValidationException $exception) {
+            self::assertSame(['mileage' => 'Пробег от 0 до 500000 км'], $exception->errors());
+        }
+    }
+
+    /** @return array<string,array{array<string,mixed>}> */
+    public static function invalidMileage(): array
+    {
+        return [
+            'пробег null' => [['mileage' => null]],
+            'пробег выше потолка 500000' => [['mileage' => 500001]],
+            'отрицательный пробег' => [['mileage' => -1]],
+        ];
+    }
+
+    public function testRejectsMissingMileage(): void
+    {
+        $payload = $this->validPayload();
+        unset($payload['mileage']);
+
+        try {
+            $this->validator->validate($payload);
+            self::fail('Ожидали ValidationException');
+        } catch (ValidationException $exception) {
+            self::assertSame(['mileage' => 'Пробег от 0 до 500000 км'], $exception->errors());
         }
     }
 }

@@ -32,6 +32,20 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
+    # Feature-тесты (tests/Feature) ходят в настоящую MySQL через
+    # Database::connect() - в docker-compose это хост "db", в CI поднимаем
+    # тем же образом, что и db в docker-compose.yml, но сервисом Actions.
+    services:
+      db:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: carmoney_lab
+          MYSQL_USER: lab
+          MYSQL_PASSWORD: lab
+          MYSQL_ROOT_PASSWORD: lab-root
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping -h 127.0.0.1 -ulab -plab" --health-interval=5s --health-timeout=5s --health-retries=20
     steps:
       - uses: actions/checkout@v4
 
@@ -52,8 +66,17 @@ jobs:
       - name: Установить зависимости
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      - name: Накатить схему и сиды БД
+        run: |
+          mysql -h127.0.0.1 -P3306 -ulab -plab carmoney_lab < db/schema.sql
+          mysql -h127.0.0.1 -P3306 -ulab -plab carmoney_lab < db/seed.sql
+
       - name: PHPUnit
         run: vendor/bin/phpunit --colors=never
+        env:
+          DB_DSN: "mysql:host=127.0.0.1;port=3306;dbname=carmoney_lab;charset=utf8mb4"
+          DB_USER: lab
+          DB_PASSWORD: lab
 
   # Агентское ревью подключается в дне 3 (3.17): там job становится обязательным
   # гейтом. Пока это заготовка-советчик: падение не блокирует PR.
