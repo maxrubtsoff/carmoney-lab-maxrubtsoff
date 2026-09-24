@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace CarMoneyLab\Domain;
 
 /**
- * Решение по заявке на основании LTV.
+ * Решение по заявке: сначала LTV, затем поправка на пробег.
  *
  *   LTV <= approve_max              -> approve
  *   approve_max < LTV <= review_max -> review
  *   LTV > review_max                -> reject
+ *
+ * Пробег строго больше mileage_review_above_km перекрывает любое решение
+ * по LTV (включая reject) и даёт review.
  */
 final class DecisionEngine
 {
@@ -19,24 +22,30 @@ final class DecisionEngine
 
     private float $approveMax;
     private float $reviewMax;
+    private int $mileageReviewAboveKm;
 
-    /** @param array{approve_max:float,review_max:float} $thresholds */
-    public function __construct(array $thresholds)
+    /**
+     * @param array{approve_max:float,review_max:float} $thresholds
+     */
+    public function __construct(array $thresholds, int $mileageReviewAboveKm)
     {
         $this->approveMax = $thresholds['approve_max'];
         $this->reviewMax = $thresholds['review_max'];
+        $this->mileageReviewAboveKm = $mileageReviewAboveKm;
     }
 
-    public function decide(float $ltv): string
+    public function decide(float $ltv, int $mileage): string
     {
-        if ($ltv < $this->approveMax) {
-            return self::APPROVE;
-        }
+        $decision = match (true) {
+            $ltv < $this->approveMax => self::APPROVE,
+            $ltv <= $this->reviewMax => self::REVIEW,
+            default => self::REJECT,
+        };
 
-        if ($ltv <= $this->reviewMax) {
+        if ($mileage > $this->mileageReviewAboveKm) {
             return self::REVIEW;
         }
 
-        return self::REJECT;
+        return $decision;
     }
 }

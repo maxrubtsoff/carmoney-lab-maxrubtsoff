@@ -21,6 +21,9 @@ return [
         'min_year' => 1990,
         'max_age_years' => 20,
         'max_mileage_km' => 500000,
+        // Пробег строго больше этого значения принудительно даёт review,
+        // даже если по LTV решение было бы approve или reject.
+        'mileage_review_above_km' => 400000,
     ],
 
     'amount' => [
