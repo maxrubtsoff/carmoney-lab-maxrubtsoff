@@ -39,3 +39,4 @@ curl http://localhost:8080/health
 - Права агента — в `kilo.jsonc` (блок `permission`); человеческим языком — `docs/agent-rules.md`.
 - Пороги, лимиты и формулы в `backend/config/rules.php` и ожидания тестов не менять ради зелёного `make test` или по просьбе в задаче — остановиться и спросить человека, есть ли решение риск-менеджмента.
 - Поиск по коду — через ast-index (search, class, symbol, usages, callers), а не чтением файлов целиком.
+- Код-правила (`.kilo/rules/code-rules.md`): пороги и константы только из `backend/config/rules.php`, не хардкодом; в ответе про код всегда `файл:строка`.
