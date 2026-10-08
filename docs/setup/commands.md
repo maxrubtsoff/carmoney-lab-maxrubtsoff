@@ -44,9 +44,9 @@
 | Вызов | Результат | Что нашёл |
 |---|---|---|
 | `/review-diff backend/src/Repository/ApplicationRepository.php` | [`review_2.4.1-2.4.3_ApplicationRepository.md`](../review/review_2.4.1-2.4.3_ApplicationRepository.md) | 2 грубые: SQL-инъекция `:92`, `save()` без транзакции `:24-58`; 3 замечания: литерал `50` `:87`, `$limit` без bind `:95`, N+1 `:100-107`. Вывод: нельзя мержить |
-| `/review-diff backend/src/Domain/DecisionEngine.php` | [`review_2.4.1-2.4.3_DecisionEngine.md`](../review/review_2.4.1-2.4.3_DecisionEngine.md) | 1 грубая: граница approve — в коде `$ltv < approve_max` (`DecisionEngine.php:41`), а в докблоке класса и в `rules.php` `LTV <= approve_max`; при LTV ровно 60.0 решение `review` вместо `approve`, тестом граница не покрыта. 2 замечания. Вывод: нельзя мержить, пока граница не подтверждена |
+| `/review-diff backend/src/Domain/DecisionEngine.php` | [`review_2.4.1-2.4.3_DecisionEngine.md`](../review/review_2.4.1-2.4.3_DecisionEngine.md) | 1 грубая: граница approve — в коде `$ltv < approve_max` (`DecisionEngine.php:40`), а в докблоке класса и в `rules.php` `LTV <= approve_max`; при LTV ровно 60.0 решение `review` вместо `approve`, тестом граница не покрыта. 2 замечания. Вывод: нельзя мержить, пока граница не подтверждена |
 | ★ `/review-diff` (без параметра) | файл не создан | В чат одна строка: «Что ревьюить: путь к файлу или имя ветки?». Git и файлы кода не трогал, цель не выбирал |
 
 Параметр реально влияет на результат: разные цели — разные файлы ревью, разные находки и разный контекст
 (для репозитория агент читал контроллер, для движка решений — `rules.php`, `LtvCalculator`, тесты).
-Находку про границу `<` / `<=` я сверил руками: `DecisionEngine.php:41` против `DecisionEngine.php:10` и `rules.php:41` — расхождение реальное.
+Находку про границу `<` / `<=` я сверил руками: `DecisionEngine.php:40` против `DecisionEngine.php:10` и `rules.php:42` — расхождение реальное.
