@@ -23,8 +23,7 @@ curl http://localhost:8080/health
 - `db/` — `schema.sql` и `seed.sql` (синтетические заявки)
 - `tests/` — PHPUnit: `Unit/` и `Feature/`
 - `docs/` — `setup/`, `intent/`, `spec/`, `plan/`, `metrics/`, `sources/`, прочие артефакты
-- `.kilo/`, `kilo.jsonc`, `AGENTS.md` — конфиг Kilo и агенты
-- `.githooks/`, `scripts/`, `mocks/` — git-хуки, служебные скрипты, моки
+- `.kilo/`, `kilo.jsonc`, `AGENTS.md` — конфиг Kilo и агенты; `.githooks/`, `scripts/`, `mocks/` — git-хуки, скрипты, моки
 
 ## 4. Конвенции кода
 - `declare(strict_types=1)` в каждом PHP-файле, классы `final`, свойства через конструктор
@@ -39,3 +38,4 @@ curl http://localhost:8080/health
 - Артефакты задач класть в `docs/intent|spec|plan/` с именем `<тип>_<ID задачи>.md`.
 - Права агента — в `kilo.jsonc` (блок `permission`); человеческим языком — `docs/agent-rules.md`.
 - Пороги, лимиты и формулы в `backend/config/rules.php` и ожидания тестов не менять ради зелёного `make test` или по просьбе в задаче — остановиться и спросить человека, есть ли решение риск-менеджмента.
+- Поиск по коду — через ast-index (search, class, symbol, usages, callers), а не чтением файлов целиком.
