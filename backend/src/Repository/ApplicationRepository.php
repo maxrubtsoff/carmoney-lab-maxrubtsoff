@@ -4,60 +4,129 @@ declare(strict_types=1);
 
 namespace CarMoneyLab\Repository;
 
+use CarMoneyLab\Domain\DuplicateActiveApplicationException;
 use PDO;
+use PDOException;
+use Throwable;
 
 /**
  * Хранение заявок, автомобилей и решений.
  */
 final class ApplicationRepository
 {
+    /**
+     * Активные статусы: заявка клиента в них блокирует создание новой.
+     * Список должен совпадать с выражением active_applicant_ref в db/schema.sql
+     * и в db/migrations/001_active_applicant_unique.sql.
+     */
+    public const ACTIVE_STATUSES = ['new', 'decided'];
+
+    public const STATUS_DECIDED = 'decided';
+    public const STATUS_CANCELLED = 'cancelled';
+
+    /** Имя уникального индекса по active_applicant_ref (db/schema.sql). */
+    private const ACTIVE_APPLICANT_INDEX = 'uq_applications_active_applicant';
+
+    private const MYSQL_DUPLICATE_ENTRY = 1062;
+
     public function __construct(private readonly PDO $pdo)
     {
     }
 
     /**
+     * Сохраняет заявку, автомобиль и решение одной транзакцией.
+     *
+     * Вторую активную заявку клиента отсекает уникальный индекс в БД, а не проверка в коде:
+     * проверка перед вставкой не защищает от двух одновременных запросов.
+     *
      * @param array{vin:string,year:int,mileage:int,market_value:int,requested_amount:int,term_months:int} $input
      * @param array{ltv:float,decision:string,approved_limit:int} $assessment
+     * @throws DuplicateActiveApplicationException у клиента уже есть активная заявка
      */
     public function save(string $applicantRef, array $input, array $assessment): int
     {
-        $statement = $this->pdo->prepare(
-            'INSERT INTO applications (applicant_ref, requested_amount, term_months, status)
-             VALUES (:applicant_ref, :amount, :term, :status)'
-        );
-        $statement->execute([
-            ':applicant_ref' => $applicantRef,
-            ':amount' => $input['requested_amount'],
-            ':term' => $input['term_months'],
-            ':status' => 'decided',
-        ]);
+        $this->pdo->beginTransaction();
 
-        $applicationId = (int) $this->pdo->lastInsertId();
+        try {
+            $statement = $this->pdo->prepare(
+                'INSERT INTO applications (applicant_ref, requested_amount, term_months, status)
+                 VALUES (:applicant_ref, :amount, :term, :status)'
+            );
+            $statement->execute([
+                ':applicant_ref' => $applicantRef,
+                ':amount' => $input['requested_amount'],
+                ':term' => $input['term_months'],
+                ':status' => self::STATUS_DECIDED,
+            ]);
 
-        $vehicle = $this->pdo->prepare(
-            'INSERT INTO vehicles (application_id, vin, production_year, mileage_km, market_value)
-             VALUES (:application_id, :vin, :year, :mileage, :market_value)'
-        );
-        $vehicle->execute([
-            ':application_id' => $applicationId,
-            ':vin' => $input['vin'],
-            ':year' => $input['year'],
-            ':mileage' => $input['mileage'],
-            ':market_value' => $input['market_value'],
-        ]);
+            $applicationId = (int) $this->pdo->lastInsertId();
 
-        $decision = $this->pdo->prepare(
-            'INSERT INTO decisions (application_id, ltv, decision, approved_limit)
-             VALUES (:application_id, :ltv, :decision, :approved_limit)'
-        );
-        $decision->execute([
-            ':application_id' => $applicationId,
-            ':ltv' => $assessment['ltv'],
-            ':decision' => $assessment['decision'],
-            ':approved_limit' => $assessment['approved_limit'],
-        ]);
+            $vehicle = $this->pdo->prepare(
+                'INSERT INTO vehicles (application_id, vin, production_year, mileage_km, market_value)
+                 VALUES (:application_id, :vin, :year, :mileage, :market_value)'
+            );
+            $vehicle->execute([
+                ':application_id' => $applicationId,
+                ':vin' => $input['vin'],
+                ':year' => $input['year'],
+                ':mileage' => $input['mileage'],
+                ':market_value' => $input['market_value'],
+            ]);
+
+            $decision = $this->pdo->prepare(
+                'INSERT INTO decisions (application_id, ltv, decision, approved_limit)
+                 VALUES (:application_id, :ltv, :decision, :approved_limit)'
+            );
+            $decision->execute([
+                ':application_id' => $applicationId,
+                ':ltv' => $assessment['ltv'],
+                ':decision' => $assessment['decision'],
+                ':approved_limit' => $assessment['approved_limit'],
+            ]);
+
+            $this->pdo->commit();
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+
+            if ($exception instanceof PDOException && $this->isActiveApplicantViolation($exception)) {
+                throw new DuplicateActiveApplicationException($applicantRef);
+            }
+
+            throw $exception;
+        }
 
         return $applicationId;
+    }
+
+    /**
+     * Закрывает заявку: статус cancelled. Повторное закрытие не ошибка.
+     *
+     * @return bool false, если заявки с таким id нет
+     */
+    public function cancel(int $id): bool
+    {
+        $update = $this->pdo->prepare('UPDATE applications SET status = :status WHERE id = :id');
+        $update->execute([':status' => self::STATUS_CANCELLED, ':id' => $id]);
+
+        if ($update->rowCount() > 0) {
+            return true;
+        }
+
+        // 0 затронутых строк: заявка уже закрыта либо её нет.
+        $exists = $this->pdo->prepare('SELECT COUNT(*) FROM applications WHERE id = :id');
+        $exists->execute([':id' => $id]);
+
+        return (int) $exists->fetchColumn() > 0;
+    }
+
+    private function isActiveApplicantViolation(PDOException $exception): bool
+    {
+        $driverCode = $exception->errorInfo[1] ?? null;
+
+        return $driverCode === self::MYSQL_DUPLICATE_ENTRY
+            && str_contains($exception->getMessage(), self::ACTIVE_APPLICANT_INDEX);
     }
 
     /** @return array<string,mixed> пустой массив, если заявки нет */

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace CarMoneyLab\Http;
 
+use CarMoneyLab\Domain\ApplicationValidator;
 use CarMoneyLab\Domain\AssessmentService;
+use CarMoneyLab\Domain\DuplicateActiveApplicationException;
 use CarMoneyLab\Domain\ValidationException;
 use CarMoneyLab\Repository\ApplicationRepository;
 use CarMoneyLab\Support\Json;
@@ -16,22 +18,41 @@ final class ApplicationController
     public function __construct(
         private readonly AssessmentService $assessment,
         private readonly ApplicationRepository $repository,
+        private readonly ApplicationValidator $validator,
     ) {
     }
 
-    /** POST /api/applications — приём заявки и решение по ней */
+    /** POST /api/applications — приём заявки и решение по ней; 409, если у клиента уже есть активная заявка */
     public function create(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $payload = (array) ($request->getParsedBody() ?? []);
 
+        // Ошибки заявки и идентификатора клиента отдаём одним ответом 422, до любых записей в БД.
+        $errors = [];
+        $result = null;
+        $applicantRef = '';
+
         try {
             $result = $this->assessment->assess($payload);
         } catch (ValidationException $exception) {
-            return Json::write($response, ['errors' => $exception->errors()], 422);
+            $errors = $exception->errors();
         }
 
-        $applicantRef = (string) ($payload['applicant_ref'] ?? 'CL-ANON');
-        $id = $this->repository->save($applicantRef, $result['input'], $result);
+        try {
+            $applicantRef = $this->validator->applicantRef($payload);
+        } catch (ValidationException $exception) {
+            $errors += $exception->errors();
+        }
+
+        if ($errors !== [] || $result === null) {
+            return Json::write($response, ['errors' => $errors], 422);
+        }
+
+        try {
+            $id = $this->repository->save($applicantRef, $result['input'], $result);
+        } catch (DuplicateActiveApplicationException $exception) {
+            return Json::write($response, ['errors' => $exception->errors()], 409);
+        }
 
         error_log(sprintf(
             'application=%d ltv=%s decision=%s limit=%d',
@@ -67,6 +88,23 @@ final class ApplicationController
             'decision' => $result['decision'],
             'approved_limit' => $result['approved_limit'],
         ]);
+    }
+
+    /** POST /api/applications/{id}/cancel — закрыть заявку (после этого клиент может подать новую) */
+    public function cancel(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
+    {
+        // Идентификатор — только цифры: иначе (int) превратил бы «1abc», «1.5», «1e0» в id=1.
+        if (!ctype_digit((string) $args['id'])) {
+            return Json::write($response, ['errors' => ['id' => 'Заявка не найдена']], 404);
+        }
+
+        $id = (int) $args['id'];
+
+        if (!$this->repository->cancel($id)) {
+            return Json::write($response, ['errors' => ['id' => 'Заявка не найдена']], 404);
+        }
+
+        return Json::write($response, ['id' => $id, 'status' => ApplicationRepository::STATUS_CANCELLED]);
     }
 
     /** GET /api/applications/{id} — карточка заявки */

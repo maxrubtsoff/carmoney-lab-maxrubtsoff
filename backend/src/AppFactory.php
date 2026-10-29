@@ -27,18 +27,20 @@ final class AppFactory
         $rules ??= require __DIR__ . '/../config/rules.php';
         $pdo ??= Database::connect();
 
+        $validator = new ApplicationValidator(
+            $rules,
+            new VinValidator($rules['vin']),
+            new VehicleAge((int) date('Y')),
+        );
+
         $assessment = new AssessmentService(
-            new ApplicationValidator(
-                $rules,
-                new VinValidator($rules['vin']),
-                new VehicleAge((int) date('Y')),
-            ),
+            $validator,
             new LtvCalculator(),
             new DecisionEngine($rules['ltv'], $rules['vehicle']['mileage_review_above_km']),
             new VehicleAge((int) date('Y')),
         );
 
-        $controller = new ApplicationController($assessment, new ApplicationRepository($pdo));
+        $controller = new ApplicationController($assessment, new ApplicationRepository($pdo), $validator);
 
         $app = SlimAppFactory::create();
         $app->addBodyParsingMiddleware();
@@ -54,6 +56,7 @@ final class AppFactory
         $app->post('/api/applications', [$controller, 'create']);
         $app->get('/api/applications', [$controller, 'index']);
         $app->get('/api/applications/{id}', [$controller, 'show']);
+        $app->post('/api/applications/{id}/cancel', [$controller, 'cancel']);
 
         return $app;
     }

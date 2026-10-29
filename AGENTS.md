@@ -20,7 +20,7 @@ curl http://localhost:8080/health
 ## 3. Структура
 - `backend/` — PHP 8.3 + Slim: `src/Domain`, `src/Http`, `src/Repository`, `src/Support`, `config/rules.php`, `public/`
 - `frontend/` — форма заявки на ванильном JS
-- `db/` — `schema.sql` и `seed.sql` (синтетические заявки)
+- `db/` — `schema.sql`, `seed.sql` (синтетические заявки) и `migrations/` (SQL для баз, созданных до изменения схемы)
 - `tests/` — PHPUnit: `Unit/` и `Feature/`
 - `docs/` — `setup/`, `intent/`, `spec/`, `plan/`, `metrics/`, `sources/`, прочие артефакты
 - `.kilo/`, `kilo.jsonc`, `AGENTS.md` — конфиг Kilo и агенты; `.githooks/`, `scripts/`, `mocks/` — git-хуки, скрипты, моки
