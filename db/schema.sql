@@ -8,8 +8,19 @@ CREATE TABLE IF NOT EXISTS applications (
     term_months     SMALLINT UNSIGNED NOT NULL,
     status          ENUM('new', 'decided', 'cancelled') NOT NULL DEFAULT 'new',
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Защита от второй активной заявки одного клиента. Значение заполнено только у активных
+    -- заявок (status new/decided) именованного клиента; для cancelled и для анонима CL-ANON
+    -- оно NULL, а UNIQUE допускает сколько угодно NULL. Список активных статусов должен
+    -- совпадать с ApplicationRepository::ACTIVE_STATUSES. Сравнение по точному значению:
+    -- коллация utf8mb4_0900_bin без нормализации регистра и пробелов.
+    active_applicant_ref VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin
+        GENERATED ALWAYS AS (
+            IF(status IN ('new', 'decided') AND applicant_ref COLLATE utf8mb4_0900_bin <> 'CL-ANON',
+               applicant_ref, NULL)
+        ) STORED,
     PRIMARY KEY (id),
-    KEY idx_applications_status (status)
+    KEY idx_applications_status (status),
+    UNIQUE KEY uq_applications_active_applicant (active_applicant_ref)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 CREATE TABLE IF NOT EXISTS vehicles (

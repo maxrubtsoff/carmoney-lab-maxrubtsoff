@@ -102,6 +102,64 @@ final class ApplicationValidatorTest extends TestCase
         ];
     }
 
+    /** @return array<string,array{array<string,mixed>,string}> */
+    public static function applicantRefInputs(): array
+    {
+        return [
+            'не передан' => [[], 'CL-ANON'],
+            'null' => [['applicant_ref' => null], 'CL-ANON'],
+            'пустая строка' => [['applicant_ref' => ''], 'CL-ANON'],
+            'пробелы' => [['applicant_ref' => "  \t "], 'CL-ANON'],
+            'явный CL-ANON' => [['applicant_ref' => 'CL-ANON'], 'CL-ANON'],
+            'обычное значение' => [['applicant_ref' => 'CL-0001'], 'CL-0001'],
+            'значение с пробелами по краям' => [['applicant_ref' => '  CL-0001 '], 'CL-0001'],
+            'регистр не меняется' => [['applicant_ref' => 'cl-0001'], 'cl-0001'],
+            'ровно 32 символа' => [['applicant_ref' => str_repeat('a', 32)], str_repeat('a', 32)],
+            '32 кириллических символа' => [['applicant_ref' => str_repeat('я', 32)], str_repeat('я', 32)],
+            '32 символа плюс пробелы' => [['applicant_ref' => ' ' . str_repeat('a', 32) . ' '], str_repeat('a', 32)],
+        ];
+    }
+
+    /** @param array<string,mixed> $payload */
+    #[DataProvider('applicantRefInputs')]
+    public function testNormalisesApplicantRef(array $payload, string $expected): void
+    {
+        self::assertSame($expected, $this->validator->applicantRef($payload));
+    }
+
+    /** @return array<string,array{mixed}> */
+    public static function invalidApplicantRefs(): array
+    {
+        return [
+            '33 символа' => [str_repeat('a', 33)],
+            '33 кириллических символа' => [str_repeat('я', 33)],
+            'массив' => [['CL-1']],
+            'пустой массив' => [[]],
+            'true' => [true],
+            'false' => [false],
+            'целое число' => [7],
+            'дробное число' => [0.5],
+        ];
+    }
+
+    #[DataProvider('invalidApplicantRefs')]
+    public function testRejectsInvalidApplicantRef(mixed $value): void
+    {
+        try {
+            $this->validator->applicantRef(['applicant_ref' => $value]);
+            self::fail('Ожидали ValidationException');
+        } catch (ValidationException $exception) {
+            self::assertSame(['applicant_ref'], array_keys($exception->errors()));
+        }
+    }
+
+    public function testValidateIgnoresApplicantRef(): void
+    {
+        $result = $this->validator->validate($this->validPayload(['applicant_ref' => ['x']]));
+
+        self::assertArrayNotHasKey('applicant_ref', $result);
+    }
+
     public function testRejectsMissingMileage(): void
     {
         $payload = $this->validPayload();

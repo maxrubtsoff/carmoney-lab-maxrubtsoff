@@ -7,6 +7,7 @@
         "php": ">=8.3",
         "ext-pdo": "*",
         "ext-json": "*",
+        "ext-mbstring": "*",
         "slim/slim": "^4.12",
         "slim/psr7": "^1.6"
     },

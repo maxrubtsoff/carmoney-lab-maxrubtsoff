@@ -10,11 +10,57 @@ namespace CarMoneyLab\Domain;
  */
 final class ApplicationValidator
 {
+    /** Клиент без идентификатора: под защиту от повторной активной заявки не попадает. */
+    public const ANONYMOUS_APPLICANT = 'CL-ANON';
+
+    /** Длина applicant_ref в символах: VARCHAR(32) в db/schema.sql (applications.applicant_ref). */
+    public const APPLICANT_REF_MAX_LENGTH = 32;
+
     public function __construct(
         private readonly array $rules,
         private readonly VinValidator $vinValidator,
         private readonly VehicleAge $vehicleAge,
     ) {
+    }
+
+    /**
+     * Идентификатор клиента для сохранения заявки.
+     *
+     * Значение обрезается trim; не передан, null или пустой после trim — аноним CL-ANON.
+     * Не строка либо длиннее 32 символов — ошибка валидации.
+     *
+     * @param array<string,mixed> $payload
+     * @return string нормализованный applicant_ref
+     * @throws ValidationException
+     */
+    public function applicantRef(array $payload): string
+    {
+        $value = $payload['applicant_ref'] ?? null;
+
+        if ($value === null) {
+            return self::ANONYMOUS_APPLICANT;
+        }
+
+        if (!is_string($value)) {
+            throw new ValidationException(['applicant_ref' => $this->applicantRefError()]);
+        }
+
+        $value = trim($value);
+
+        if ($value === '') {
+            return self::ANONYMOUS_APPLICANT;
+        }
+
+        if (mb_strlen($value, 'UTF-8') > self::APPLICANT_REF_MAX_LENGTH) {
+            throw new ValidationException(['applicant_ref' => $this->applicantRefError()]);
+        }
+
+        return $value;
+    }
+
+    private function applicantRefError(): string
+    {
+        return sprintf('Идентификатор клиента — строка не длиннее %d символов', self::APPLICANT_REF_MAX_LENGTH);
     }
 
     /**
